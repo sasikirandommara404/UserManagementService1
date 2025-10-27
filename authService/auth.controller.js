@@ -8,10 +8,6 @@ import { JWT_SECRET, REFRESH_JWT_SECRET, VERIFICATION_TTL } from '../config/env.
 import logger from '../logger.js'
 
 
-
-
-
-
 /**
  * User Registration controller
  */
@@ -19,11 +15,20 @@ import logger from '../logger.js'
 export const registerUser = async (req, res) => {
   try {
     console.log('received data from frontend',req.body);
-    const { email,password,first_name,last_name,phone_number} = req.body;
+    const { email,password,first_name,last_name,phone_number,role} = req.body;
 
     if (!email || !password || !first_name || !last_name || !phone_number) {
       return res.status(400).json({ message: 'Required fields missing'});
-    } 
+    }
+    
+    const validRoles = ['user','admin']
+    let userRole = 'user';
+    if(role){
+      if(!validRoles.includes(role.toLowerCase())){
+        return res.status(400).json({ message: 'Invalid Role' });
+      }
+      userRole = role.toLowerCase();
+    }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -42,7 +47,13 @@ export const registerUser = async (req, res) => {
     const user = await prisma.users.create({
       data: { email, password_hash: hashed,first_name,last_name,phone_number},
     });
-   
+   await prisma.role.create({
+    data:{
+      id:user.id,
+      name:userRole,
+      is_active:true
+    }
+  })
     
     const token = jwt.sign({ userId: user.id, email }, JWT_SECRET, { expiresIn: `${VERIFICATION_TTL}s` });
 
@@ -117,10 +128,19 @@ export const loginUser = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    const role = await prisma.role.findUnique({where:{id:user.id}})
+
     // Password check
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    if(!user.is_verified){
+      return res.status(403).json(
+        { error: 'Email not verified. Please verify your email before logging in.',
+          verified:false,
+          email:user.email
+         });
     }
 
     // Update last login time
@@ -131,7 +151,7 @@ export const loginUser = async (req, res) => {
 
     // Issue tokens
     const accessToken = jwt.sign(
-      { userId: user.id, email: user.email },
+      { userId: user.id, email: user.email,role:role.name },
       JWT_SECRET,
       { expiresIn: '15m' }
     );
@@ -321,11 +341,57 @@ export const updateUser = async (req, res) => {
 export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.users.delete({ where: { id } });
-    res.status(204).send();
+    
+    // Use transaction to delete both user and role
+    await prisma.$transaction(async (tx) => {
+      // Delete role first (foreign key constraint)
+      await tx.role.delete({ 
+        where: { id: id }  // Since id in role table = user id
+      });
+      
+      // Then delete user
+      await tx.users.delete({ 
+        where: { id } 
+      });
+    });
+    
+    // Clean up Redis data for this user
+    try {
+      await redis.del(`refresh:${id}`);
+      // Clean up any verification tokens for this user
+      const verifyKeys = await redis.keys(`verify:*`);
+      for (const key of verifyKeys) {
+        const userId = await redis.get(key);
+        if (userId === id) {
+          await redis.del(key);
+        }
+      }
+      logger.info('✅ Cleaned up Redis data for user:', id);
+    } catch (redisErr) {
+      logger.warn('⚠️ Failed to clean up Redis data:', redisErr.message);
+      // Not critical, continue
+    }
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+    });
+    
+    res.status(204).json({ message: 'Account deleted successfully' });
   } catch (err) {
+    logger.error('❌ DeleteUser Error:', err.message);
+    logger.error('Error code:', err.code);
+    
     if (err.code === 'P2025') {
       return res.status(404).json({ error: 'User not found' });
+    }
+    if (err.code === 'P2003') {
+      return res.status(400).json({ error: 'Cannot delete user due to existing dependencies' });
     }
     res.status(500).json({ error: 'Internal server error' });
   }

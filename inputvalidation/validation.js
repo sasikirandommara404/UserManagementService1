@@ -29,12 +29,16 @@ export const userRegister = joi.object(
                 'string.pattern.base': `Password must contain at least one uppercase letter, one lowercase letter and one number`,
                 'any.required': `"password" is a required field`
           }),
-        phone_number: joi.string().pattern(new RegExp('^[0-9]{10,15}$')).required().messages({
+        phone_number: joi.string().pattern(new RegExp('^[5-9][0-9]{9}$')).required().messages({
                 'string.base': `"phone_number" should be a type of 'text'`,
                 'string.empty': `"phone_number" cannot be an empty field`,
-                'string.pattern.base': `Phone Number must contain only numbers and has to be between 10 - 15 digits long`,
+                'string.pattern.base': `Phone Number must be a valid Indian Phone number(10 digits starting from with 5-9) `,
                 'any.required': `"phone_number" is a required field`
           }),
+          role:joi.string().valid('user','admin').optional().messages({
+            'string.base': `"role" should be a type of 'text'`,
+            'any.only': `"role" must be one of [user, admin]`,
+          })
 
 }); 
 
@@ -67,10 +71,10 @@ export const updateUserinput = joi.object(
             'string.min': `"last_name" should have a minimum length of {#limit}`,
             'string.max': `"last_name" should have a maximum length of {#limit}`,
         }),
-        phone_number: joi.string().pattern(new RegExp('^[0-9]{10,15}$')).messages({
+        phone_number: joi.string().pattern(new RegExp('^[5-9][0-9]{9}$')).messages({
             'string.base': `"phone_number" should be a type of 'text'`,
             'string.empty': `"phone_number" cannot be an empty field`,  
-            'string.pattern.base': `Phone Number must contain only numbers and has to be between 10 - 15 digits long`,
+            'string.pattern.base': `Phone Number must be a valid Indian phone number (10 digits starting with 5-9)`,
         }),
         email: joi.forbidden().messages({
             'any.unknown': `"email" cannot be updated`,

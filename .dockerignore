@@ -1,0 +1,36 @@
+node_modules
+.git
+*.log
+.env
+# Node modules (install inside container instead)
+node_modules
+npm-debug.log
+yarn-error.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git files
+.git
+.gitignore
+
+# Environment files (copy separately if needed)
+.env
+.env.local
+.env.*.local
+
+# Prisma generated client (will be generated inside container)
+generated/prisma
+prisma/migrations
+
+# Logs
+*.log
+
+# Docker / build files
+Dockerfile*
+docker-compose*.yml
+
+# VSCode / IDE files
+.vscode/
+.idea/

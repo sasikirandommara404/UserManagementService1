@@ -27,5 +27,5 @@ export const startConsumer = async () => {
 };
 
 // Make sure to call startConsumer if this is your entry file:
-startConsumer();
+
 
