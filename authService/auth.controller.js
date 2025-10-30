@@ -216,10 +216,10 @@ export const refreshAccessToken = async (req, res) => {
     const storedToken = await redis.get(`refresh:${payload.userId}`);
     if (storedToken !== refreshToken)
       return res.status(401).json({ error: 'Invalid refresh token' });
-
+    const role = await prisma.role.findUnique({where:{id:payload.userId}});
     // Issue new access token
     const newAccessToken = jwt.sign(
-      { userId: payload.userId, email: payload.email },
+      { userId: payload.userId, email: payload.email,role:role.name },
       JWT_SECRET,
       { expiresIn: '15m' }
     );
